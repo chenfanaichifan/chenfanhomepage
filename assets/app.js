@@ -14,7 +14,7 @@ const SUPABASE_ANON_KEY = "在这里粘贴你的anon_public_key";
 /* ---- 反馈后台（admin.html）的口令：改成你自己记得住的 ----
    注意：这是「页面上的门帘」，能挡住随手点进来的路人，但不是军用级加密。
    想让留言彻底不公开，见 docs/supabase-setup.md 的「私密模式」。 */
-const ADMIN_PASS = "chifan2026";
+const ADMIN_PASS = "chenfan2008";
 
 /* ---- 小工具：把云端 / 本地的时间统一显示成 2026-09-17 20:31 ---- */
 function fmtTime(v){
@@ -532,10 +532,115 @@ function initFeedback(){
   const countEl  = document.getElementById("feedCount");
   const btn      = form.querySelector('button[type="submit"]');
 
+  let editingId = null;   /* 正在编辑的留言 id */
+  let busy = false;       /* 提交中，防连点 */
+
+  function errText(err){ return (err && err.message) ? err.message : "请稍后再试"; }
+
   function setStatus(text, cls){
     if(!statusEl) return;
     statusEl.textContent = text;
     statusEl.className = "feed-status" + (cls ? " " + cls : "");
+  }
+
+  function refresh(){ return Store.fetchFeeds(render); }
+
+  /* ---- 单条留言：自己的那条带「我的」标签 + 编辑 / 撤回 ---- */
+  function msgNode(m){
+    const it = document.createElement("div");
+    it.className = "msg-item" + (m.mine ? " mine" : "");
+
+    const head = document.createElement("div");
+    head.className = "msg-head";
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = (m.anon || !m.name) ? "· 匿名访客 ·" : (m.name + " · 访客");
+    head.appendChild(who);
+    if(m.mine){
+      const tag = document.createElement("span");
+      tag.className = "mine-tag"; tag.textContent = "我的";
+      head.appendChild(tag);
+    }
+    if(m.edited){
+      const tag = document.createElement("span");
+      tag.className = "edited-tag"; tag.textContent = "已编辑";
+      head.appendChild(tag);
+    }
+    const time = fmtTime(m.t);
+    if(time){
+      const t = document.createElement("span");
+      t.className = "time"; t.textContent = time;
+      head.appendChild(t);
+    }
+    it.appendChild(head);
+
+    /* ---- 编辑态：换成文本框 + 保存 / 取消 ---- */
+    if(m.mine && editingId !== null && String(editingId) === String(m.id)){
+      const box = document.createElement("div");
+      box.className = "edit-box";
+      const ta = document.createElement("textarea");
+      ta.className = "edit-input"; ta.rows = 2; ta.value = m.text;
+      const ops = document.createElement("div");
+      ops.className = "ops";
+      const save = document.createElement("button");
+      save.type = "button"; save.className = "op primary"; save.textContent = "保存";
+      const cancel = document.createElement("button");
+      cancel.type = "button"; cancel.className = "op"; cancel.textContent = "取消";
+      ops.appendChild(save); ops.appendChild(cancel);
+      box.appendChild(ta); box.appendChild(ops);
+      it.appendChild(box);
+
+      save.onclick = ()=>{
+        const nv = ta.value.trim();
+        if(!nv){ setStatus("留言不能为空", "err"); ta.focus(); return; }
+        if(nv === m.text){ editingId = null; render(); return; }
+        save.disabled = cancel.disabled = true;
+        setStatus("正在保存…", "busy");
+        Store.editFeed(m.id, nv).then(()=>{
+          editingId = null;
+          setStatus("已保存修改", "ok");
+          return refresh();
+        }).catch(err=>{
+          setStatus("保存失败：" + errText(err), "err");
+          render();
+        });
+      };
+      cancel.onclick = ()=>{ editingId = null; render(); };
+      setTimeout(()=> ta.focus(), 0);
+      return it;
+    }
+
+    const body = document.createElement("div");
+    body.className = "body";
+    body.textContent = m.text;
+    it.appendChild(body);
+
+    /* ---- 只有自己的留言才有操作按钮（别人的看不到、也改不了） ---- */
+    if(m.mine){
+      const ops = document.createElement("div");
+      ops.className = "ops";
+      const edit = document.createElement("button");
+      edit.type = "button"; edit.className = "op"; edit.textContent = "编辑";
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "op danger"; del.textContent = "撤回";
+      ops.appendChild(edit); ops.appendChild(del);
+      it.appendChild(ops);
+
+      edit.onclick = ()=>{ editingId = m.id; render(); };
+      del.onclick = ()=>{
+        if(!window.confirm("确定撤回这条留言吗？撤回后无法恢复。")) return;
+        edit.disabled = del.disabled = true;
+        setStatus("正在撤回…", "busy");
+        Store.deleteFeed(m.id).then(()=>{
+          setStatus("已撤回", "ok");
+          return refresh();
+        }).catch(err=>{
+          setStatus("撤回失败：" + errText(err), "err");
+          render();
+        });
+      };
+    }
+    return it;
   }
 
   function render(){
@@ -549,31 +654,16 @@ function initFeedback(){
       msgList.innerHTML = '<div class="empty">还没有留言，来写第一条吧～</div>';
       return;
     }
-    Store.FEEDS.forEach(m=>{
-      const it = document.createElement("div");
-      it.className = "msg-item";
-      const who = document.createElement("div");
-      who.className = "who";
-      who.textContent = (m.anon || !m.name) ? "· 匿名访客 ·" : (m.name + " · 访客");
-      const body = document.createElement("div");
-      body.textContent = m.text;
-      it.appendChild(who); it.appendChild(body);
-      const time = fmtTime(m.t);
-      if(time){
-        const t = document.createElement("span");
-        t.className = "time";
-        t.textContent = time;
-        it.appendChild(t);
-      }
-      msgList.appendChild(it);
-    });
+    Store.FEEDS.forEach(m=> msgList.appendChild(msgNode(m)));
   }
 
   form.onsubmit = e=>{
     e.preventDefault();
+    if(busy) return;
     const text = feedText.value.trim();
     if(!text){ setStatus("写点什么再提交吧", "err"); feedText.focus(); return; }
     const m = { name: feedName.value.trim(), text, anon: feedAnon.checked, t: Date.now() };
+    busy = true;
     if(btn) btn.disabled = true;
     setStatus("正在提交…", "busy");
     Store.submitFeed(m).then(()=>{
@@ -581,11 +671,11 @@ function initFeedback(){
       setStatus(Store.isCloud()
         ? "已收到，谢谢你的反馈！"
         : "已收到（当前是本地演示模式，配置云端后才会跨设备保存）", "ok");
-      return Store.fetchFeeds(render);
+      return refresh();
     }).catch(err=>{
-      setStatus("提交失败：" + ((err && err.message) ? err.message : "请稍后再试"), "err");
+      setStatus("提交失败：" + errText(err), "err");
       render();
-    }).then(()=>{ if(btn) btn.disabled = false; });
+    }).then(()=>{ busy = false; if(btn) btn.disabled = false; });
   };
 
   render();

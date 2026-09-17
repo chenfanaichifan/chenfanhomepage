@@ -82,7 +82,7 @@ header.top .sound{opacity:.5}
 .i-mid{position:relative;text-align:center;z-index:2}
 .i-line{
   display:block;font-family:var(--display);
-  font-size:clamp(46px,10.5vw,150px);line-height:.94;letter-spacing:-.02em;
+  font-size:clamp(54px,12.5vw,190px);line-height:.96;letter-spacing:-.01em;
   color:#fff;opacity:0;transform:translateY(28px);
   transition:opacity .8s cubic-bezier(.16,1,.3,1),transform .8s cubic-bezier(.16,1,.3,1);
 }
@@ -331,7 +331,17 @@ header.top .sound{opacity:.5}
 .feed-form button:hover{background:var(--ink);color:var(--light)}
 .msg-list{display:flex;flex-direction:column;gap:1px;background:var(--line-l)}
 .msg-item{background:var(--dark);padding:22px;font-size:13px;line-height:1.9;color:rgba(255,255,255,.82)}
-.msg-item .who{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim-l);margin-bottom:9px}
+.msg-item.mine{box-shadow:inset 3px 0 0 var(--light)}
+.msg-item .msg-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px}
+.msg-item .who{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim-l);margin-bottom:0}
+.mine-tag{
+  font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;line-height:1.5;
+  color:var(--dark);background:var(--light);padding:2px 7px;
+}
+.edited-tag{
+  font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:rgba(255,255,255,.42);border:1px solid rgba(255,255,255,.2);padding:1px 6px;
+}
 .empty{background:transparent;padding:26px 2px;font-size:13px;color:var(--dim-l)}
 
 /* 提交状态提示 */
@@ -343,9 +353,29 @@ header.top .sound{opacity:.5}
 .feed-status.err{color:#b3261e}
 .feed-status.busy{color:var(--dim)}
 .msg-item .time{
-  display:block;margin-top:10px;font-size:10px;letter-spacing:.16em;
+  margin-left:auto;font-size:10px;letter-spacing:.16em;
   text-transform:uppercase;color:rgba(255,255,255,.32);
 }
+
+/* 自己的留言：编辑 / 撤回 */
+.msg-item .ops{display:flex;gap:14px;margin-top:14px}
+.msg-item .op{
+  background:none;border:0;padding:0 0 2px;cursor:pointer;
+  font-family:inherit;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(255,255,255,.5);border-bottom:1px solid rgba(255,255,255,.22);
+  transition:color .25s,border-color .25s;
+}
+.msg-item .op:hover{color:#fff;border-color:#fff}
+.msg-item .op.danger:hover{color:#ff8b7a;border-color:#ff8b7a}
+.msg-item .op.primary{color:#fff;border-color:#fff}
+.msg-item .op:disabled{opacity:.4;cursor:default}
+.edit-box{margin-top:4px}
+.edit-input{
+  width:100%;box-sizing:border-box;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.22);color:#fff;padding:12px 14px;
+  font-family:inherit;font-size:13px;line-height:1.9;resize:vertical;
+}
+.edit-input:focus{outline:none;border-color:rgba(255,255,255,.6)}
 .feed-count{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim-l);margin-bottom:16px}
 
 /* ============ 反馈后台（admin.html） ============ */
