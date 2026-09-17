@@ -95,6 +95,20 @@
 - **遗留**：Supabase 的 `SUPABASE_URL` / `SUPABASE_ANON_KEY` 还是占位符，所以现在仍然跑**本地演示模式**；**新 SQL（含三个函数）需要在 Supabase 的 SQL Editor 里跑一遍**，云端的权限设计才算真正生效。⚠️ 注意：**必须先跑新 SQL 再填 URL/key**，否则反馈页会报「读取留言失败」且列表为空（前端已经在调用还不存在的函数）。
 - **下一步**：① 在 Supabase 跑新 SQL；② 填 URL / key；③ 把 `index.html`、`assets/app.js`、`assets/style.css`、`docs/` 更新到 GitHub；④ 用手机打开线上网址提交一条，回电脑确认「手机那条改不了」—— 真机验证权限。
 
+### V3.1 补记 —— Supabase 云端正式闭环（同日完成）
+
+- **本轮完成**：把上面 V3.1 的「遗留 / 下一步」全部做完，留言板**真正跑在云端**了。
+- **关键改动**：
+  1. **填上云端配置**：`assets/app.js` 的 `SUPABASE_URL` / `SUPABASE_ANON_KEY` 换成真实值（新版 **Publishable key**，`sb_publishable_...`）。
+  2. **提交留言改走函数 `add_feed`**。踩到的坑：新版 Publishable key **不是 JWT**、不带 `anon` 角色声明（诊断函数 `whoami()` 显示 `jwt.role=(NOT SET)`），所以 `to anon` 的 insert 策略匹配不到它，**直连 insert 会报 `42501 / new row violates row-level security policy`**。解决办法是把写入也放进 `security definer` 函数，四个函数统一入口。SQL 见 `outputs/supabase-add-feed.sql`。
+  3. **修掉一个会让整站静默失效的隐患**：站点原来从 `cdn.jsdelivr.net` 加载 supabase-js，实测该域名在本机网络下**连接被重置**（`WinError 10054`），无头浏览器拿不到 `window.supabase`，页面就**静默退回本地演示模式** —— 真实访客也会遇到同样问题。已把库**下载进仓库**（`assets/supabase.js`，218 KB，UMD 版），7 个页面全部改成 `<script src="assets/supabase.js"></script>`，**不再依赖任何 CDN**。
+  4. **文档同步**：`docs/supabase-setup.md` 补上 `add_feed` 函数、Publishable key 说明、`42501` / `PGRST202` 两条排错，并把 CDN 那条从「换网络重试」改成「改用仓库内文件」。
+- **验证**（两层，全部实测）：
+  - **服务端 REST 探测 15 项全过**：正确钥匙改 / 删成功（204）；**错误钥匙被拒**（「没有权限修改这条留言」/「没有权限撤回这条留言」）；**匿名直连 UPDATE / DELETE 影响 0 行**；空文本被拒（「内容不能为空」）；最终列表回空。
+  - **真实浏览器端到端**：无头 Edge 打开 `feedback.html`，**走真实表单提交** → 状态条「已收到，谢谢你的反馈！」、计数 +1、留言带「我的」标签与实名（`UI测试员 · 访客`）；点「编辑」→ 出现输入框 → 保存 → 文字更新并出现「已编辑」标记；点「撤回」→ 成功删除。**云端模式确认**：计数后面**没有**「（本地演示模式）」。
+- **顺带修掉三个本地验证脚本的问题**（不影响网站本身）：`cdp_eval.py` 的调试端口原先与本地预览服务器**撞在 8099**、WebSocket 超时 15 秒不够跑长脚本、无头浏览器**没禁用系统代理** —— 三者都会误报「页面打不开」，已分别改为 `PORT+1000`、180 秒、`--no-proxy-server`。
+- **下一步**：① 把改动推上 GitHub（`assets/app.js`、**新增的 `assets/supabase.js`**、7 个 HTML、`docs/`）；② 到 Supabase SQL Editor 跑一次 `delete from public.feeds;` 清掉测试留言；③ 用手机打开线上网址提交一条，确认「手机那条在电脑上改不了」。
+
 ---
 
 ## 提问｜自己补充数字分身问答

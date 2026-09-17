@@ -4,7 +4,7 @@
 
 | 功能 | 走向 | 表 / 函数 |
 |---|---|---|
-| 「反馈意见」留言 | 访客提交 → 存进 Supabase → 所有人都能看到 | 表 `feeds`（只插入） |
+| 「反馈意见」留言 | 访客提交 → 存进 Supabase → 所有人都能看到 | 函数 `add_feed`（写入表 `feeds`） |
 | 读取留言列表 | 走函数读，匿名拿不到「钥匙」列 | 函数 `list_feeds` |
 | 编辑 / 撤回**自己的**留言 | 凭本机钥匙调用，改不动别人的 | 函数 `edit_feed` / `delete_feed` |
 | 「数字分身」问答 | 页面从 Supabase 读取问答库 | 表 `twin` |
@@ -18,8 +18,9 @@
 
 每个访客第一次打开网页时，浏览器会**自己生成一把随机钥匙**存在本机（`localStorage` 的 `chifan_token`），提交留言时一起写进数据库。以后**只有拿着这把钥匙的那台设备**才能编辑 / 撤回它自己的留言。
 
-- 数据库对匿名访客**只开放「插入」**，并且**故意不给** select / update / delete 策略 → 任何人都无法绕过页面直接读改删数据库。
-- 读取、修改、删除全部走三个**带钥匙校验的函数**（RPC），钥匙对不上直接报错。
+- 数据库对匿名访客**不开放任何直接的读 / 改 / 删** → 任何人都无法绕过页面直接读改删数据库。
+- **提交、读取、修改、删除全部走四个函数**（RPC）：`add_feed` 负责写、`list_feeds` 负责读、`edit_feed` / `delete_feed` 负责改和删；改删时钥匙对不上直接报错。
+- ⚠️ **为什么连「提交」也要走函数**：新版 Supabase 的 **Publishable key** 不是 JWT，不带 `anon` 角色声明，`to anon` 的 insert 策略匹配不到它（会报 `42501: new row violates row-level security policy`）。把写入放进 `security definer` 函数里就绕开了这个问题，顺便统一了入口。
 - 前端只拿到钥匙的**末 12 位指纹**（`fp`），用来在列表里标出「我的」；光有指纹无法伪造出完整钥匙。
 
 ⚠️ 这是**防误操作 / 防手滑**级别，不是银行级安全：服务端函数确实会校验钥匙，但钥匙存在浏览器里，**换设备或清缓存后就找不回自己的留言了**（这是这个方案的正常代价）。
@@ -78,7 +79,7 @@ returns table (
 language sql
 security definer
 set search_path = public
-as $$
+as $fn$
   select f.id,
          f.name,
          f.text as body,
@@ -89,7 +90,7 @@ as $$
   from public.feeds f
   order by f.created_at desc
   limit greatest(1, least(coalesce(p_limit, 200), 500));
-$$;
+$fn$;
 
 -- 2.2 改自己的留言：钥匙对不上就报错
 create or replace function public.edit_feed(p_id bigint, p_token text, p_text text)
@@ -97,7 +98,7 @@ returns void
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn$
 begin
   if coalesce(trim(p_text), '') = '' then
     raise exception '内容不能为空';
@@ -115,7 +116,7 @@ begin
     raise exception '没有权限修改这条留言';
   end if;
 end;
-$$;
+$fn$;
 
 -- 2.3 撤回自己的留言：钥匙对不上就报错
 create or replace function public.delete_feed(p_id bigint, p_token text)
@@ -123,7 +124,7 @@ returns void
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn$
 begin
   delete from public.feeds f
    where f.id = p_id
@@ -134,11 +135,39 @@ begin
     raise exception '没有权限撤回这条留言';
   end if;
 end;
-$$;
+$fn$;
 
-grant execute on function public.list_feeds(int)                to anon;
-grant execute on function public.edit_feed(bigint, text, text)  to anon;
-grant execute on function public.delete_feed(bigint, text)      to anon;
+-- 2.4 提交留言：走函数而不是直连 insert
+-- （新版 Publishable key 不带 anon 角色声明，直连 insert 会被 RLS 拒绝）
+create or replace function public.add_feed(p_name text, p_text text, p_anon boolean, p_token text)
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $fn$
+declare
+  v_id bigint;
+begin
+  if coalesce(trim(p_text), '') = '' then
+    raise exception '内容不能为空';
+  end if;
+
+  if length(trim(p_text)) > 2000 then
+    raise exception '内容太长了（最多 2000 字）';
+  end if;
+
+  insert into public.feeds (name, text, anon, owner_token)
+  values (left(coalesce(trim(p_name), ''), 30), trim(p_text), coalesce(p_anon, false), coalesce(p_token, ''))
+  returning id into v_id;
+
+  return v_id;
+end;
+$fn$;
+
+grant execute on function public.list_feeds(int)                     to anon;
+grant execute on function public.add_feed(text, text, boolean, text) to anon;
+grant execute on function public.edit_feed(bigint, text, text)       to anon;
+grant execute on function public.delete_feed(bigint, text)           to anon;
 
 
 -- ========= 3. 数字分身问答表 =========
@@ -166,7 +195,7 @@ create policy "twin public select" on public.twin
 ## 第三步：确认表、函数、策略都在
 
 1. 左侧 **Table Editor** → 能看到 `feeds`、`twin` 两张表。
-2. 左侧 **Database → Functions** → 应该能看到 `list_feeds`、`edit_feed`、`delete_feed` 三个函数。
+2. 左侧 **Database → Functions** → 应该能看到 `list_feeds`、`add_feed`、`edit_feed`、`delete_feed` 四个函数。
 3. 左侧 **Authentication → Policies** → `feeds` 应该只有 **1 条**（insert）、`twin` 有 1 条（select）。
 
 > `feeds` 只有 1 条策略是**故意的**，不是漏建。读到 2 条 select 策略说明跑的是旧 SQL，重跑上面整段即可。
@@ -189,8 +218,8 @@ insert into public.twin (keywords, answer) values
 
 1. Supabase 左侧 **Project Settings**（齿轮）→ **API**。
 2. 复制 **Project URL**，形如 `https://abcdefgh.supabase.co`。
-3. 在 **Project API keys** 里复制 **anon / public** 那一串（很长，`eyJ...` 开头）。
-   ⚠️ 只复制 **anon public**，**绝对不要**复制 `service_role`。
+3. 在 **API Keys** 页复制 **Publishable key**（新版形如 `sb_publishable_...`；如果你的项目还是旧版界面，就复制 **anon public**，形如 `eyJ...`）。
+   ⚠️ 这两种都是**允许放在前端**的钥匙；**绝对不要**复制 **Secret key** / `service_role`。
 4. 打开项目里的 `assets/app.js`，最上面找到这两行，**只替换引号里的内容**：
 
 ```js
@@ -202,7 +231,7 @@ const SUPABASE_ANON_KEY = "在这里粘贴你的anon_public_key";
 
 ```js
 const SUPABASE_URL = "https://abcdefgh.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.很长很长很长";
+const SUPABASE_ANON_KEY = "sb_publishable_你的那一串";
 ```
 
 5. 保存文件，刷新网页。
@@ -233,18 +262,19 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.很长很长很�
 
 | 现象 | 原因 | 怎么办 |
 |---|---|---|
+| `42601: syntax error at or near "$"`（定位到 `as $` 一行） | 粘贴 SQL 时函数体的 `$$` 被吃掉了一个 `$` —— 从聊天窗口、微信、富文本编辑器复制时很常见 | 改用命名标记 `$fn$`（本仓库 `outputs/supabase-setup.sql` 就是这版），或改成**从纯文本文件**（记事本 / VS Code）复制粘贴 |
 | `0A000: 无法在默认表达式中使用列引用` | 你多半不在 Supabase 的 SQL Editor 里，而是在别的数据库工具（Navicat / DBeaver / 本地 Postgres）里跑；或是在 Table Editor 的建列弹窗里填了 `now()` | 确认地址栏是 `supabase.com/dashboard/project/_/sql/new`，用上面那段完整 SQL 重跑 |
 | `42P07: relation "feeds" already exists` | 表已存在 | 先跑 `drop table if exists public.feeds cascade;` |
 | `42P01: relation does not exist` | SQL 只跑了一半 | 全选整段 SQL 再点 Run（**没选中时 Run 跑全部，选中了就只跑选中的**） |
 | `42702: column reference "text" is ambiguous` | 用的是旧版 SQL（函数返回列名和类型名撞了） | 用上面新版整段重跑 |
 | `PGRST202: Could not find the function public.list_feeds` | 三个函数没建出来，或没跑完 | 去 **Database → Functions** 确认；没有就重跑第二步整段 |
 | `42501: permission denied` | 用的 key 不对 | 换成 **anon public** key，别用 service_role |
-| 留言提交后没进后台，列表也看不到 | RLS 策略没建成功 | 重跑 `create policy` 那几行，检查 Authentication → Policies |
-| `new row violates row-level security policy` | `feeds public insert` 策略缺失 | 补那条 insert 策略 |
+| 提交留言报 `42501` / `new row violates row-level security policy` | 前端还在用**直连 insert**（旧代码），而新版 Publishable key 不带 `anon` 角色声明，`to anon` 的 insert 策略匹配不到它 | 提交改走 `add_feed` 函数（本仓库 `assets/app.js` 已是 `sb.rpc("add_feed", ...)`）；函数的 SQL 见 `outputs/supabase-add-feed.sql` |
+| `PGRST202: Could not find the function public.add_feed` | `add_feed` 函数没建出来，或 SQL 只跑了一半 | 跑 `outputs/supabase-add-feed.sql` 整段。⚠️ **从文件复制，不要从聊天窗口复制**（`$` 会被吃掉） |
 | 点「编辑 / 撤回」报 `没有权限修改这条留言` / `没有权限撤回这条留言` | 本机钥匙对不上（换了设备、清了缓存、或留言本来就不是这台机器发的） | 这是**正常保护**。想改的话用当初那台设备 / 那个浏览器 |
 | 列表里自己的留言**没有**「我的」标签 | 本机钥匙丢了（清了缓存），或留言是本地演示模式时期发的 | 清掉缓存后重发一条即可 |
 | 网页一直显示「（本地演示模式）」 | `assets/app.js` 里还是占位符，或 URL 没以 `https://` 开头 | 检查 `SUPABASE_URL` 是否以 `https://` 开头、key 是否完整 |
-| 打开页面白屏 | CDN 被墙 / 断网（Supabase 的 JS 走 jsdelivr） | 换网络重试；代码本身不依赖 CDN 也能回退本地模式 |
+| 打开页面白屏 / 留言一直显示「（本地演示模式）」 | 早期版本从 `cdn.jsdelivr.net` 加载 supabase-js，该域名在国内网络下经常连不上（连接被重置） | 本仓库已改为引用仓库内的 `assets/supabase.js`，**不依赖任何 CDN**。若你用的是旧版，请把 7 个页面里的 `<script src="https://cdn.jsdelivr.net/...">` 换成 `<script src="assets/supabase.js"></script>`，并把该文件一起上传 |
 
 ---
 
@@ -265,14 +295,14 @@ revoke execute on function public.list_feeds(int) from anon;
 
 > 要恢复公开留言板，把权限加回去即可：`grant execute on function public.list_feeds(int) to anon;`
 >
-> 提交入口（`feeds public insert` 策略）**不要**随便删，删了留言就提交不进来了。
+> 提交入口是 `add_feed` 函数，**不要**收掉它的 `execute` 权限，否则留言就提交不进来了。
 
 ---
 
 ## 数据流回顾（对应课程阶段三）
 
 ```
-访客浏览器 ──提交留言──→ Supabase REST API ──写入──→ 数据库 feeds 表（带本机钥匙）
+访客浏览器 ──调用 add_feed()──→ 服务端函数 ──写入──→ 数据库 feeds 表（带本机钥匙）
 访客浏览器 ──调用 list_feeds()──→ 拿到留言列表 + 钥匙指纹 fp → 标出「我的」
 访客点「编辑 / 撤回」──调用 edit_feed() / delete_feed()──→ 服务端比对钥匙 ──对了才改
 访客提问 ──→ 页面匹配 twin 表（或内置问答）──→ 数字分身回答
