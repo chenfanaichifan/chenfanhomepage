@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>反馈意见 — 好好吃饭</title>
+<meta name="description" content="给好好吃饭（陈帆）留言：建议、鼓励，或想聊的话题。支持匿名。">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body class="dark">
+
+<div id="cursor"></div>
+
+<header class="top">
+  <a class="brand" href="index.html">好好吃饭 — PORTFOLIO</a>
+  <div class="right">
+    <div class="grp r1">
+      <a href="about.html">关于</a>
+      <a href="projects.html">项目</a>
+      <a href="twin.html">分身</a>
+      <a href="feedback.html">反馈</a>
+      <a href="contact.html">联系</a>
+    </div>
+    <div class="grp r2"><span>CN</span><span class="sound">SOUND — OFF</span></div>
+  </div>
+</header>
+
+<main class="page">
+  <div class="starfield"></div>
+
+  <div class="page-hero wrap">
+    <div class="crumb"><a href="index.html">星空首页</a><i></i><span>04 / Feedback</span></div>
+    <h1 class="page-title reveal">反馈意见</h1>
+    <p class="page-sub reveal">写下你的建议、鼓励，或想聊的话题。可以匿名，也可以留下称呼。</p>
+  </div>
+
+  <div class="page-body wrap">
+    <div class="feedback">
+      <div class="feed-panel reveal">
+        <form class="feed-form" id="feedForm">
+          <div class="row">
+            <label>你的称呼</label>
+            <input type="text" id="feedName" placeholder="不填则匿名留言" />
+          </div>
+          <div class="row">
+            <label>想对我说的话</label>
+            <textarea id="feedText" placeholder="写下你的建议、鼓励或想聊的话题…" required></textarea>
+          </div>
+          <label class="anon"><input type="checkbox" id="feedAnon" checked /> 匿名留言（不公开称呼）</label>
+          <button type="submit">提交留言</button>
+          <p class="feed-status" id="feedStatus"></p>
+        </form>
+      </div>
+      <div class="reveal">
+        <div class="feed-count" id="feedCount"></div>
+        <div class="msg-list" id="msgList"></div>
+      </div>
+    </div>
+
+    <a class="big-back" href="index.html">← 返回星空首页</a>
+
+    <nav class="nav-list reveal">
+      <a href="about.html"><div class="n">01 / About</div><div class="t">关于我</div><div class="d">一个刚进大学的小登，篮球、游戏和编程。</div></a>
+      <a href="projects.html"><div class="n">02 / Work</div><div class="t">项目</div><div class="d">正在长大的三个项目。</div></a>
+      <a href="twin.html"><div class="n">03 / Twin</div><div class="t">数字分身</div><div class="d">关于我的问题，都可以问它。</div></a>
+      <a href="contact.html"><div class="n">05 / Contact</div><div class="t">联系</div><div class="d">QQ、微信，随时找我。</div></a>
+    </nav>
+  </div>
+
+  <footer class="wrap">
+    <div>© 好好吃饭 · 陈帆 —— 先做出来，再逐步改。</div>
+    <div>WINNERS DON'T SMILE</div>
+  </footer>
+</main>
+
+</body>
+</html>

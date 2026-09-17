@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>好好吃饭 — PORTFOLIO</title>
+<meta name="description" content="好好吃饭（陈帆）的个人主页。星空导航：关于我、项目、数字分身、反馈意见、联系。">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+
+<div id="cursor"></div>
+
+<!-- ============ 开场：深色半调网点 + 巨型字体逐行浮现 ============ -->
+<div id="intro">
+  <div class="starfield"></div>
+  <div class="dots"></div>
+  <div class="intro-top">
+    <span>好好吃饭 — PORTFOLIO</span>
+    <span>2026</span>
+  </div>
+  <div class="i-mid">
+    <span class="i-line">嗯，</span>
+    <span class="i-line">点，</span>
+    <span class="i-line">线，</span>
+    <span class="i-line">面。</span>
+    <div class="i-en">WELL, DOTS, LINES, PLANES.</div>
+  </div>
+</div>
+
+<!-- ============ 顶栏（真链接） ============ -->
+<header class="top">
+  <a class="brand" href="index.html">好好吃饭 — PORTFOLIO</a>
+  <div class="right">
+    <div class="grp r1">
+      <a href="about.html">关于</a>
+      <a href="projects.html">项目</a>
+      <a href="twin.html">分身</a>
+      <a href="feedback.html">反馈</a>
+      <a href="contact.html">联系</a>
+    </div>
+    <div class="grp r2">
+      <span>CN</span><span class="sound">SOUND — OFF</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ 浅色极简 Hero ============ -->
+<section class="scene light" id="top">
+  <div class="dots-light"></div>
+  <div class="hero wrap">
+    <div class="kicker">STUDENT · DEVELOPER IN PROGRESS · CHINA</div>
+    <h1>HAOHAO<span class="cn">好好吃饭</span></h1>
+    <div class="meta">
+      <p class="p">我叫陈帆，一个保持初心、相信天天进步的人。刚走进大学，正在和微积分、线性代数、英语，还有编程较劲。</p>
+      <div>
+        <div>QQ / 2350776866</div>
+        <div>WECHAT / 13807430106</div>
+      </div>
+    </div>
+    <div class="slogan">想赢的人是不会笑的</div>
+  </div>
+  <div class="scroll-hint"><i></i> Scroll</div>
+</section>
+
+<!-- ============ 星空导航中枢：点击节点 → 进入对应页面 ============ -->
+<section class="scene dark graph-scene" id="map">
+  <div class="glow"></div>
+  <div class="starfield"></div>
+  <canvas id="graph"></canvas>
+  <div class="graph-title">
+    <div class="k">Click a node to enter</div>
+    <h2>点点连成线，<br>线连成面。</h2>
+  </div>
+  <div class="graph-hud">
+    <div class="side">NAVIGATION &gt;</div>
+    <div class="hint">点击星点进入页面 &nbsp;·&nbsp; CLICK A NODE TO ENTER &nbsp;·&nbsp; DRAG TO EXPLORE</div>
+  </div>
+</section>
+
+<!-- ============ 页面索引（手机上也能正常跳转） ============ -->
+<section class="scene dark sec-pad">
+  <div class="starfield"></div>
+  <div class="wrap">
+    <div class="kicker" style="color:var(--dim-l)">Index — 全部页面</div>
+    <nav class="nav-list reveal" style="margin-top:26px">
+      <a href="about.html"><div class="n">01 / About</div><div class="t">关于我</div><div class="d">一个刚进大学的小登，篮球、游戏和编程。</div></a>
+      <a href="projects.html"><div class="n">02 / Work</div><div class="t">项目</div><div class="d">正在长大的三个项目。</div></a>
+      <a href="twin.html"><div class="n">03 / Twin</div><div class="t">数字分身</div><div class="d">关于我的问题，都可以问它。</div></a>
+      <a href="feedback.html"><div class="n">04 / Feedback</div><div class="t">反馈意见</div><div class="d">想对我说的话，写在这里。</div></a>
+      <a href="contact.html"><div class="n">05 / Contact</div><div class="t">联系</div><div class="d">QQ、微信，随时找我。</div></a>
+    </nav>
+  </div>
+  <footer class="wrap">
+    <div>© 好好吃饭 · 陈帆 —— 先做出来，再逐步改。</div>
+    <div>WINNERS DON'T SMILE</div>
+  </footer>
+</section>
+
+</body>
+</html>
