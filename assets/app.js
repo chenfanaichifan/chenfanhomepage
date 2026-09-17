@@ -5,11 +5,11 @@
    ================================================================ */
 
 /* ================================================================
-   ① 后端配置 —— 把 Supabase 项目的 URL 与 anon key 填到下面。
+   ① 后端配置 —— 把 Supabase 项目的 URL 与 public key 填到下面。
    未填写时，页面自动使用「本地演示模式」，留言存在浏览器里。
    ================================================================ */
-const SUPABASE_URL = "在这里粘贴你的Supabase项目URL";      /* 形如 https://xxxx.supabase.co */
-const SUPABASE_ANON_KEY = "在这里粘贴你的anon_public_key";
+const SUPABASE_URL = "https://nswcbakbfwudvlvosvrf.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_kuXAUFGFeXbidSqvek8PGw_OlQjEA0o";
 
 /* ---- 反馈后台（admin.html）的口令：改成你自己记得住的 ----
    注意：这是「页面上的门帘」，能挡住随手点进来的路人，但不是军用级加密。
@@ -138,9 +138,11 @@ const Store = {
   /* 新增留言 */
   submitFeed(m){
     if(this.isCloud()){
-      return this.sb.from("feeds").insert([{
-        name: m.name || "", text: m.text, anon: !!m.anon, owner_token: this.token()
-      }]).then(res=>{
+      /* 走 add_feed 函数而不是直接 insert：新版 Supabase 密钥下
+         "to anon" 的 insert 策略可能匹配不上，函数方式与读/改/删保持一致，最稳。 */
+      return this.sb.rpc("add_feed", {
+        p_name: m.name || "", p_text: m.text, p_anon: !!m.anon, p_token: this.token()
+      }).then(res=>{
         if(res.error) return Promise.reject(res.error);
         return Promise.resolve();
       });
