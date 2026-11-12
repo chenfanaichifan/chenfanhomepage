@@ -2,9 +2,10 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNiIgZmlsbD0iIzBiMGQxMiIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjQuNCIgZmlsbD0iI2U4ZmY1OSIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjkuNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZThmZjU5IiBzdHJva2Utb3BhY2l0eT0iMC40IiBzdHJva2Utd2lkdGg9IjEuMyIvPjxjaXJjbGUgY3g9IjI1IiBjeT0iNy41IiByPSIxLjUiIGZpbGw9IiNlOGZmNTkiIGZpbGwtb3BhY2l0eT0iMC43NSIvPjwvc3ZnPg==">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>数字分身 — 好好吃饭</title>
-<meta name="description" content="好好吃饭（陈帆）的数字分身：关于我的问题，都可以问它。">
+<meta name="description" content="好好吃饭（陈帆）的数字分身：基于我自己整理的资料，由大模型回答问题。">
 <script src="assets/supabase.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,7 +37,7 @@
   <div class="page-hero wrap">
     <div class="crumb"><a href="index.html">星空首页</a><i></i><span>03 / Digital Twin</span></div>
     <h1 class="page-title reveal">数字分身</h1>
-    <p class="page-sub reveal">这是"分身的我"，答案由我自己设置。关于我的问题，都可以来问它。</p>
+    <p class="page-sub reveal">答案来自我自己准备的资料，交给大模型组织语言。关于我的事，都可以问它。</p>
   </div>
 
   <div class="page-body wrap">
@@ -48,11 +49,13 @@
           <input id="chatInput" type="text" placeholder="问问关于我的事…" />
           <button id="sendBtn">提问</button>
         </div>
-        <p class="tip">没有命中时，可以点上方的问题，或到「反馈意见」页面留言给我。</p>
+        <p class="tip">它答不上来时会直说「不知道」，不会瞎编。想问更多，可以到「反馈意见」页面留言给我。</p>
+        <p class="tip tip-strong">说清楚它的能力：它现在<strong>真的接了大模型</strong>（不再是关键词匹配）。但它的知识<strong>只来自我自己整理的资料</strong>——不是全网搜索，也不是我本人在线。它会拒绝答私人信息、敏感话题、评价他人和冒充我做决定这类问题。说错的地方，欢迎到「反馈意见」页纠正我。</p>
       </div>
       <div class="side reveal">
         <p>它记下的，都是真实的陈帆。想了解我，先问问它。</p>
-        <p class="muted">想补充问题？告诉我想知道的答案，我会把它写进分身的记忆里。</p>
+        <p class="muted">它接了大模型，但只答我准备过的资料；问到边界问题，它会直说。</p>
+        <p class="muted">当前能力：大模型问答（资料由我自己整理）。答不上来就说不知道，不瞎编。</p>
       </div>
     </div>
 
