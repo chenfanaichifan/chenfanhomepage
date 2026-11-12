@@ -10,6 +10,12 @@
    ================================================================ */
 const SUPABASE_URL = "https://nswcbakbfwudvlvosvrf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_kuXAUFGFeXbidSqvek8PGw_OlQjEA0o";
+/* ---- 数字分身接口（Supabase Edge Function）----
+   API key 只存在服务端，这个地址可以公开。
+   本地联调时在页面里注入 window.TWIN_ENDPOINT 即可改指向本地代理。 */
+const TWIN_ENDPOINT =
+  (typeof window !== "undefined" && window.TWIN_ENDPOINT) ||
+  (SUPABASE_URL + "/functions/v1/twin");
 
 /* ---- 反馈后台（admin.html）的口令：改成你自己记得住的 ----
    注意：这是「页面上的门帘」，能挡住随手点进来的路人，但不是军用级加密。
@@ -54,6 +60,7 @@ const DEFAULT_TWIN = [
    ================================================================ */
 const Store = {
   sb:null, FEEDS:[], TWIN:[], cached:false,
+  LOAD_ERR:"",   /* 上一次读取留言为什么失败（空字符串=成功） */
 
   isCloud(){ return !!this.sb; },
 
@@ -113,13 +120,16 @@ const Store = {
       /* 本地演示模式：从 localStorage 重新读一次，这样后台的「刷新」也有用 */
       this.FEEDS = this.loadLocal();
       this.TWIN.length || (this.TWIN = DEFAULT_TWIN.slice());
+      this.LOAD_ERR = "";
       return done && done();
     }
     const fp = this.fingerprint();
-    this.sb.rpc("list_feeds", { p_limit: limit || 100 }).then(res=>{
+    this.LOAD_ERR = "";
+    return this.sb.rpc("list_feeds", { p_limit: limit || 100 }).then(res=>{
       if(res.error){
         console.error("读取留言失败:", res.error.message);
         this.FEEDS = [];
+        this.LOAD_ERR = res.error.message || "网络错误";
       } else {
         this.FEEDS = (res.data || []).map(r=>({
           id: r.id,
@@ -131,6 +141,13 @@ const Store = {
           mine: r.fp === fp
         }));
       }
+      done && done();
+    }).catch(err=>{
+      /* 连不上网络时 Supabase 客户端会直接抛异常。以前这里没有 catch，
+         done 永远不会被调用，页面会一直停在「正在读取…」。 */
+      console.error("读取留言失败:", err);
+      this.FEEDS = [];
+      this.LOAD_ERR = (err && err.message) || "网络错误";
       done && done();
     });
   },
@@ -319,7 +336,7 @@ function initGraph(){
       });
     }
     nodes = NODES.map(d=>({
-      t:d.t, p:d.p, x:d.x, y:d.y, r:3.4, ox:0, oy:0,
+      t:d.t, p:d.p, x:d.x, y:d.y, r:5.2, ox:0, oy:0,
       vx:(Math.random()-.5)*.00004, vy:(Math.random()-.5)*.00004, hover:0
     }));
   }
@@ -337,33 +354,72 @@ function initGraph(){
   resize(); seed();
   window.addEventListener("resize", ()=>{ resize(); seed(); });
 
-  /* --- 拖动探索（拖动时不触发跳转） --- */
-  let dragging=false, lx=0, ly=0, moved=0;
-  cv.addEventListener("mousedown", e=>{ dragging=true; moved=0; lx=e.clientX; ly=e.clientY; });
-  window.addEventListener("mouseup", ()=>{ dragging=false; tOffX=offX; tOffY=offY; });
+  /* --- 拖动探索（拖动时不触发跳转） ---
+     两个关键修正：
+     ① 坐标换算：事件给的是「视口坐标」，节点位置是「画布内坐标」，
+        画布不在视口左上角时（页面滚动中）必须换算，否则命中判定整体偏移、点不中；
+     ② 判定改用「按下点到当前点的直线距离」，不再累加每一小段位移
+        （旧写法对手抖极敏感，抖两三次就超过 6px 被当成拖动，点击被丢弃）。 */
+  const TAP_TOL = 12;          /* 按下后位移不超过 12px = 算点击 */
+  const HIT_R   = 72;          /* 节点命中半径（与视觉光晕呼应） */
+  let dragging=false, lx=0, ly=0, moved=0, sx=0, sy=0;
+
+  function toLocal(clientX, clientY){
+    const r = cv.getBoundingClientRect();
+    return { x: clientX - r.left, y: clientY - r.top };
+  }
+  function down(x, y){ dragging=true; moved=0; lx=sx=x; ly=sy=y; }
+  function move(x, y){
+    if(!dragging) return;
+    offX += x-lx; offY += y-ly;
+    tOffX=offX; tOffY=offY;
+    moved = Math.hypot(x-sx, y-sy);        /* ← 直线距离，容忍手抖 */
+    lx=x; ly=y;
+  }
+  function up(){ dragging=false; tOffX=offX; tOffY=offY; }
+  function go(clientX, clientY){
+    if(moved > TAP_TOL) return;            /* 刚才是拖动，不算点击 */
+    const L = toLocal(clientX, clientY);
+    const n = hitNode(L.x, L.y, HIT_R);
+    if(!n || !n.p) return;
+    cv.style.cursor = "wait";
+    location.href = n.p;                   /* ← 关键：整页跳转，不是滚动 */
+  }
+
+  /* 鼠标 */
+  cv.addEventListener("mousedown", e=> down(e.clientX, e.clientY));
+  window.addEventListener("mouseup", up);
   cv.addEventListener("mousemove", e=>{
-    mx=e.clientX; my=e.clientY;
-    if(dragging){
-      offX += e.clientX-lx; offY += e.clientY-ly;
-      tOffX=offX; tOffY=offY;
-      moved += Math.abs(e.clientX-lx)+Math.abs(e.clientY-ly);
-      lx=e.clientX; ly=e.clientY;
-    }
+    const L = toLocal(e.clientX, e.clientY);
+    mx = L.x; my = L.y;                    /* hover 视觉也用画布内坐标 */
+    move(e.clientX, e.clientY);
     /* 悬停到节点上时，光标变成手型，提示"可以点进去" */
-    const over = hitNode(e.clientX, e.clientY, 70);
+    const over = hitNode(L.x, L.y, HIT_R);
     cv.style.cursor = over ? "pointer" : "crosshair";
     cv.title = over ? ("进入：" + over.p) : "";
   });
   cv.addEventListener("mouseleave", ()=>{ mx=my=-9999; cv.style.cursor="crosshair"; });
+  cv.addEventListener("click", e=> go(e.clientX, e.clientY));
 
-  /* ★ 点击节点 → 真·跳转（浏览器加载新页面） */
-  cv.addEventListener("click", e=>{
-    if(moved > 6) return;                    /* 刚才是拖动，不算点击 */
-    const n = hitNode(e.clientX, e.clientY, 70);
-    if(!n || !n.p) return;
-    cv.style.cursor = "wait";
-    location.href = n.p;                     /* ← 关键：整页跳转，不是滚动 */
-  });
+  /* 触摸（手机 / 平板）：单指拖 = 平移星空，轻点 = 进入页面 */
+  cv.addEventListener("touchstart", e=>{
+    const t = e.touches[0]; if(!t) return;
+    const L = toLocal(t.clientX, t.clientY);
+    mx = L.x; my = L.y;
+    down(t.clientX, t.clientY);
+  }, {passive:true});
+  cv.addEventListener("touchmove", e=>{
+    const t = e.touches[0]; if(!t) return;
+    const L = toLocal(t.clientX, t.clientY);
+    mx = L.x; my = L.y;
+    move(t.clientX, t.clientY);
+  }, {passive:true});
+  cv.addEventListener("touchend", e=>{
+    const t = e.changedTouches[0]; if(!t) return;
+    e.preventDefault();                    /* 阻止随后的合成 click，避免跳两次 */
+    up();
+    go(t.clientX, t.clientY);
+  }, {passive:false});
 
   function frame(ts){
     const t = ts||0;
@@ -439,12 +495,18 @@ function initGraph(){
       const p = pos(n), d = Math.hypot(p.x-mx, p.y-my);
       const near = d < 95 ? 1-(d/95) : 0;
       n.hover += (near - n.hover)*.15;
-      const rr = n.r + n.hover*2.4;
+      const rr = n.r + n.hover*2.2;
 
-      const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,18+n.hover*14);
-      g.addColorStop(0, "rgba(255,255,255,"+(0.26 + n.hover*0.34)+")");
+      const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,24+n.hover*16);
+      g.addColorStop(0, "rgba(255,255,255,"+(0.30 + n.hover*0.34)+")");
       g.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.beginPath(); ctx.fillStyle=g; ctx.arc(p.x,p.y,18+n.hover*14,0,6.283); ctx.fill();
+      ctx.beginPath(); ctx.fillStyle=g; ctx.arc(p.x,p.y,24+n.hover*16,0,6.283); ctx.fill();
+
+      /* 常驻细圆环：让访客一眼看出「这里是可以点的」 */
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(255,255,255,"+(0.16 + n.hover*0.55)+")";
+      ctx.lineWidth = 1;
+      ctx.arc(p.x, p.y, 11 + n.hover*8, 0, 6.283); ctx.stroke();
 
       ctx.beginPath();
       ctx.fillStyle = "rgba(255,255,255,"+(0.88 + n.hover*0.12)+")";
@@ -486,38 +548,154 @@ function initTwin(){
   const chatInput = document.getElementById("chatInput");
   const sendBtn = document.getElementById("sendBtn");
 
+  const HISTORY = [];        /* 多轮上下文：只存 user / assistant */
+  const MAX_TURNS = 8;
+  const MAX_CHARS = 300;
+  let busy = false;          /* 请求中，防连点 */
+  let degraded = false;      /* 接口不可用 → 退到本地预设，并明确告诉访客 */
+  let degradedTimer = null;
+
+  function scrollDown(){ chatBox.scrollTop = chatBox.scrollHeight; }
+
   function addMsg(text, who){
     const d = document.createElement("div");
     d.className = "msg " + who;
     d.textContent = text;
     chatBox.appendChild(d);
-    chatBox.scrollTop = chatBox.scrollHeight;
+    scrollDown();
+    return d;
   }
-  function ask(q){
-    q = (q||"").trim();
-    if(!q) return;
-    addMsg(q, "user");
-    setTimeout(()=> addMsg(Store.matchAnswer(q), "bot"), 220);
+
+  function addTyping(){
+    const d = document.createElement("div");
+    d.className = "msg bot typing";
+    d.innerHTML = "<span></span><span></span><span></span>";
+    chatBox.appendChild(d);
+    scrollDown();
+    return d;
   }
+
+  function setBusy(on){
+    busy = on;
+    sendBtn.disabled = on;
+    chatInput.disabled = on;
+    sendBtn.textContent = on ? "想想…" : "提问";
+  }
+
+  /* 调后端。API key 在服务端，页面里没有。 */
+  async function callTwin(messages){
+    const ctrl = new AbortController();
+    const timer = setTimeout(()=> ctrl.abort(), 32000);
+    try{
+      const res = await fetch(TWIN_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: messages.slice(-MAX_TURNS) }),
+        signal: ctrl.signal
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_e){}
+      if(!res.ok || !data || !data.answer){
+        const why = (data && (data.message || data.error)) || ("HTTP " + res.status);
+        throw new Error(why);
+      }
+      return data.answer;
+    }catch(err){
+      if(err && err.name === "AbortError") throw new Error("等待超时（32 秒）");
+      if(err instanceof TypeError) throw new Error("请求发不出去（可能是网络或跨域问题）");
+      throw err;
+    }finally{
+      clearTimeout(timer);
+    }
+  }
+
+  function goDegraded(){
+    degraded = true;
+    clearTimeout(degradedTimer);
+    /* 60 秒后自动允许重试，不用刷新页面 */
+    degradedTimer = setTimeout(()=>{ degraded = false; }, 60000);
+  }
+
+  function addError(err, retryQ){
+    const box = document.createElement("div");
+    box.className = "msg bot err";
+    const line = document.createElement("div");
+    line.textContent = "暂时连不上我的「大脑」（大模型接口）：" +
+      ((err && err.message) || "未知原因") +
+      "。这通常是网络问题，跟留言数据无关。";
+    box.appendChild(line);
+
+    const btn = document.createElement("button");
+    btn.className = "retry";
+    btn.type = "button";
+    btn.textContent = "重试";
+    btn.onclick = ()=>{ box.remove(); degraded = false; ask(retryQ, true); };
+    box.appendChild(btn);
+
+    chatBox.appendChild(box);
+    scrollDown();
+  }
+
+  async function ask(q, isRetry){
+    q = (q || "").trim();
+    if(!q || busy) return;
+    if(q.length > MAX_CHARS) q = q.slice(0, MAX_CHARS);
+
+    if(!isRetry){
+      addMsg(q, "user");
+      HISTORY.push({ role: "user", content: q });
+    }
+
+    /* 已知接口不可用：用本地预设回答，并在气泡里标明来源 */
+    if(degraded){
+      addMsg(Store.matchAnswer(q) + "（本地预设答案 · 大模型接口当前不可用）", "bot");
+      return;
+    }
+
+    const t = addTyping();
+    setBusy(true);
+    try{
+      const answer = await callTwin(HISTORY);
+      t.remove();
+      addMsg(answer, "bot");
+      HISTORY.push({ role: "assistant", content: answer });
+      if(HISTORY.length > MAX_TURNS) HISTORY.splice(0, HISTORY.length - MAX_TURNS);
+    }catch(err){
+      t.remove();
+      /* 失败的那一轮不进上下文，免得把错误带进后续对话 */
+      if(HISTORY.length && HISTORY[HISTORY.length-1].role === "user") HISTORY.pop();
+      goDegraded();
+      addError(err, q);
+    }finally{
+      setBusy(false);
+      scrollDown();
+    }
+  }
+
   function buildQuick(){
     quickBox.innerHTML = "";
     const list = ["你是谁","你喜欢什么","想赢的人不会笑","最近在学什么","做过的项目","怎么联系你","给我一句鼓励"];
     list.forEach(text=>{
       const b = document.createElement("button");
+      b.type = "button";
       b.textContent = text;
       b.onclick = ()=> ask(text);
       quickBox.appendChild(b);
     });
   }
-  sendBtn.onclick = ()=>{ ask(chatInput.value); chatInput.value = ""; };
+
+  sendBtn.onclick = ()=>{ const v = chatInput.value; chatInput.value = ""; ask(v); };
   chatInput.addEventListener("keydown", e=>{
-    if(e.key === "Enter"){ ask(chatInput.value); chatInput.value = ""; }
+    /* 中文输入法正在选词时按回车，不应该发出去 */
+    if(e.key === "Enter" && !e.isComposing){
+      const v = chatInput.value; chatInput.value = ""; ask(v);
+    }
   });
 
   buildQuick();
   addMsg("你好，我是好好吃饭的数字分身。关于我，你想问点什么？", "bot");
-  addMsg("（试试下方问题，或输入你想知道的）", "bot");
-  Store.fetchTwin(()=>{ /* 云端问答就绪后即可命中 */ });
+  addMsg("（我接了大模型，但只答我自己准备过的资料；问到我的边界，我会直说。）", "bot");
+  Store.fetchTwin(()=>{ /* 只在「接口不可用」时用作本地兜底 */ });
 }
 
 /* ================================================================
@@ -653,6 +831,26 @@ function initFeedback(){
         : "";
     }
     if(!Store.FEEDS.length){
+      /* 关键修复：连不上服务器时绝不能显示「还没有留言」——
+         访客会以为自己的留言被删了（我自己就被骗过一次）。
+         这里如实说明，并给一个重试按钮。 */
+      if(Store.LOAD_ERR){
+        const box = document.createElement("div");
+        box.className = "empty err";
+        const t1 = document.createElement("div");
+        t1.className = "empty-msg"; t1.textContent = "暂时连不上服务器，留言没能加载出来。";
+        const t2 = document.createElement("div");
+        t2.className = "empty-sub"; t2.textContent = "这不代表留言被删了——它们还在云端。点下面重新加载试试。";
+        const retry = document.createElement("button");
+        retry.type = "button"; retry.className = "retry-btn"; retry.textContent = "重新加载";
+        retry.onclick = ()=>{
+          retry.disabled = true; retry.textContent = "正在重试…";
+          Promise.resolve(refresh()).then(()=>{ retry.disabled = false; retry.textContent = "重新加载"; });
+        };
+        box.appendChild(t1); box.appendChild(t2); box.appendChild(retry);
+        msgList.appendChild(box);
+        return;
+      }
       msgList.innerHTML = '<div class="empty">还没有留言，来写第一条吧～</div>';
       return;
     }
@@ -723,12 +921,15 @@ function initAdmin(){
     listEl.innerHTML = '<div class="empty">正在读取…</div>';
     Store.fetchFeeds(function(){
       const list = Store.FEEDS;
-      if(stTotal) stTotal.textContent = list.length;
-      if(stToday) stToday.textContent = list.filter(m=>sameDay(m.t)).length;
-      if(stLast)  stLast.textContent  = list.length ? fmtShort(list[0].t) : "—";
+      const bad = !!Store.LOAD_ERR;      /* 读失败时统计数字不可信，一律显示 — */
+      if(stTotal) stTotal.textContent = bad ? "—" : list.length;
+      if(stToday) stToday.textContent = bad ? "—" : list.filter(m=>sameDay(m.t)).length;
+      if(stLast)  stLast.textContent  = bad ? "—" : (list.length ? fmtShort(list[0].t) : "—");
       listEl.innerHTML = "";
       if(!list.length){
-        listEl.innerHTML = '<div class="empty">还没有留言。把网址发出去，等第一条反馈吧。</div>';
+        listEl.innerHTML = bad
+          ? '<div class="empty err"><div class="empty-msg">暂时连不上服务器，读不到留言。</div><div class="empty-sub">这不代表留言被删了——它们还在云端。上面的统计此刻不可信，稍后点「刷新」再试。</div></div>'
+          : '<div class="empty">还没有留言。把网址发出去，等第一条反馈吧。</div>';
         return;
       }
       list.forEach(m=>{
@@ -748,7 +949,7 @@ function initAdmin(){
 
   function exportCsv(){
     const list = Store.FEEDS;
-    if(!list.length){ alert("还没有留言"); return; }
+    if(!list.length){ alert(Store.LOAD_ERR ? "现在连不上服务器，读不到留言，稍后再试。" : "还没有留言"); return; }
     const esc = v => '"' + String(v === null || v === undefined ? "" : v).replace(/"/g,'""') + '"';
     const lines = ["时间,称呼,内容,是否匿名"];
     list.forEach(m=>{
@@ -765,7 +966,7 @@ function initAdmin(){
 
   function copyAll(){
     const list = Store.FEEDS;
-    if(!list.length){ alert("还没有留言"); return; }
+    if(!list.length){ alert(Store.LOAD_ERR ? "现在连不上服务器，读不到留言，稍后再试。" : "还没有留言"); return; }
     const txt = list.map(m=>"[" + fmtTime(m.t) + "] " + whoOf(m) + "：" + m.text).join("\n\n");
     if(navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(txt)
