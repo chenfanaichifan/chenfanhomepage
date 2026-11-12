@@ -674,7 +674,7 @@ function initTwin(){
 
   function buildQuick(){
     quickBox.innerHTML = "";
-    const list = ["你是谁","你喜欢什么","想赢的人不会笑","最近在学什么","做过的项目","怎么联系你","给我一句鼓励"];
+    const list = ["你是谁","这个网站怎么做的","星空是怎么画的","留言板怎么实现的","你怎么看 AI","微积分难学吗","平时玩什么","最近在学什么","做过的项目","球馆手账是什么","想赢的人不会笑","怎么联系你"];
     list.forEach(text=>{
       const b = document.createElement("button");
       b.type = "button";
